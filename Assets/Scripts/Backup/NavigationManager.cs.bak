@@ -1,0 +1,105 @@
+using System.Collections;
+using UnityEngine;
+using UnityEngine.Networking;
+
+public class NavigationManager : MonoBehaviour
+{
+    public GameObject markerPrefab;
+
+    private string url =
+        "http://10.0.2.105:8080/api/navigation?start=1&end=5";
+
+    // Building Entrance = our fixed starting/reference point
+    private double referenceLatitude = 11.0168;
+    private double referenceLongitude = 76.9557;
+
+    void Start()
+    {
+        Debug.Log("NavigationManager Started");
+        StartCoroutine(GetPath());
+    }
+
+    IEnumerator GetPath()
+    {
+        Debug.Log("Sending request...");
+
+        UnityWebRequest request = UnityWebRequest.Get(url);
+
+        yield return request.SendWebRequest();
+
+        Debug.Log("Request Finished");
+        Debug.Log("Result: " + request.result);
+
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            string json = request.downloadHandler.text;
+
+            Debug.Log("JSON:");
+            Debug.Log(json);
+
+            string wrappedJson = "{\"nodes\":" + json + "}";
+
+            NodeList nodeList =
+                JsonUtility.FromJson<NodeList>(wrappedJson);
+
+            foreach (NodeData node in nodeList.nodes)
+            {
+                Debug.Log("Node: " + node.nodeName);
+
+                Vector3 position = GPSPosition(
+                    node.latitude,
+                    node.longitude,
+                    node.floorId
+                );
+
+                GameObject marker = Instantiate(
+                    markerPrefab,
+                    position,
+                    Quaternion.identity
+                );
+
+                marker.name = "Marker_" + node.nodeName;
+            }
+        }
+        else
+        {
+            Debug.LogError("ERROR: " + request.error);
+        }
+    }
+
+    Vector3 GPSPosition(
+        double latitude,
+        double longitude,
+        int floorId)
+    {
+        // Approximate metres per degree
+        double metersPerLatitude = 111320.0;
+
+        double metersPerLongitude =
+            111320.0 *
+            Mathf.Cos((float)referenceLatitude * Mathf.Deg2Rad);
+
+        double x =
+            (longitude - referenceLongitude)
+            * metersPerLongitude;
+
+        double z =
+            (latitude - referenceLatitude)
+            * metersPerLatitude;
+
+        // Different floors get different heights
+        float y = (floorId - 1) * 3.0f + 0.2f;
+
+        return new Vector3(
+            (float)x,
+            y,
+            (float)z
+        );
+    }
+}
+
+[System.Serializable]
+public class NodeList
+{
+    public NodeData[] nodes;
+}
